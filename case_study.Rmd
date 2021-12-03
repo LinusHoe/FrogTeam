@@ -1,0 +1,244 @@
+---
+title: "Untitled"
+author: "Linus Hoelzel"
+date: "11/22/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+setwd("C:/Users/Linus/Documents/R/DataVis")
+library(data.table)
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(TTR)
+library(scales)
+library(forcats)
+source("datavis_scrips.R")
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+# Extract all
+files <- list.files("data", full.names = TRUE)
+names(files) <- basename(files)
+tables <- lapply(files, fread, encoding = "UTF-8")
+names <- lapply(tables, colnames)
+
+# get single 
+life_exp <- tables$life_expectancy.csv
+unemp <- tables$unemployment.csv
+accidents <- tables$accidents_2017.csv
+accidents <- clean_colnames(accidents)
+
+immigrants_by_nationality <- tables$immigrants_by_nationality.csv
+immigrants_by_age <- tables$immigrants_emigrants_by_age.csv
+immigrants_by_destination <- tables$immigrants_emigrants_by_destination.csv
+immigrants_by_sex <- tables$immigrants_emigrants_by_sex.csv
+tables_bus <- tables$bus_stops.csv
+
+
+accidents <- convert_columns(accidents, from = "character", to = "factor")
+
+# Can I do this in one line? 
+accidents <- accidents[, Part.of.the.day:=as.factor(Part.of.the.day)]
+accidents <- accidents[, Weekday:=as.factor(Weekday)]
+accidents <- accidents[, Month:=as.factor(Month)]
+accidents <- accidents[, Month:=as.factor(Month)]
+
+airqual <- tables$air_quality_Nov2017.csv
+airqual[,"Station"] <- airqual[, Station] %>% gsub("Barcelona - ", "", .)
+
+liveexpect <- tables$life_expectancy.csv
+
+population <- tables$population.csv
+population <- population[Year == "2017"]
+population <- population[,c("Year", "Age", "Number", "District.Name", "Gender")]
+population <- population[, Demographic:=sum(Number), by = Age] 
+population <- population[, District.Population :=sum(Number), by = District.Name]
+
+population <- population[, Age.per.District := Number/District.Population]
+population <- convert_columns(population, from = "character", to = "factor")
+
+
+transport <- tables$transports.csv
+
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r unemployment by year, echo=FALSE}
+unemp$Month <- ordered(unemp$Month, levels=c("December", "November", "October",
+                                                           "September", "August", "July",
+                                                           "June", "May", "April", 
+                                                           "March", "February", "January"))
+unemp_year = "2017"
+
+unemp <- clean_colnames(unemp)
+
+unemp %>%
+  dplyr::filter(Year==unemp_year,
+         Demand_occupation=="Registered unemployed",
+         District.Name!="No consta") %>%
+  group_by(Month, Gender) %>%
+  summarise(Count=sum(Number)) %>%
+  mutate(percent=paste0(round((Count/sum(Count))*100, 2), "%")) %>%
+  ggplot(aes(x=Month, y=Count, fill=Gender)) +
+  geom_bar(stat="identity") +
+  geom_text(aes(label=percent, group=Gender), position=position_stack(vjust=0.5)) +
+  scale_y_continuous(labels=comma) +
+  labs(x="Month", y="Population", title=paste0("Unemployment by month ", unemp_year)) +
+  theme_bw() +
+  coord_flip() 
+
+
+
+
+```
+
+
+
+
+```{r accidents, echo=FALSE}
+ggplot(tables_bus, aes(x = Longitude, y = Latitude)) + 
+  geom_point(color = "green")
+  
+
+airqual <- airqual[airqual[, Latitude < 42]]
+p <- ggplot(airqual, aes(x = Longitude, y = Latitude)) + 
+  geom_point(color = "grey", size = 5) 
+
+q <- p +  geom_point(data=tables_bus,colour="green")
+w <- q + geom_point(data=accidents,colour="blue",size=0.1)+ geom_label(aes(label = Station))
+#v <- w + geom_point(data=transport,colour="red",size=0.1)
+w
+
+ggsave(filename="myPlot.png", plot=w)
+print(w)
+dev.off()
+```
+
+
+
+
+```{r accidents, echo=FALSE}
+population[,][ order(Demographic)]
+ggplot(data = population, aes(x = Age, y = Number))+ 
+  geom_boxplot() + 
+  facet_grid(~Gender)
+
+ggplot(data = population, aes(x = Age, y =Demographic)) + 
+  geom_count()
+
+ggplot(data = population, aes(x = Age, y =Number)) + 
+  geom_violin() + 
+  facet_grid(~Ge)
+
+
+ggplot(data = population, aes(x = log(Number), y = log(Age.per.District))) +
+  geom_point()
+```
+
+```{r accidents, echo=FALSE}
+airqual <- separate(airqual, col = Generated, into = c("Day", "Month", "Year", "Hour"))
+airqual[, "Day.Hour" := as.factor(paste0(Day, Hour))]
+airqual[, "Station" := as.factor(Station)]
+airqual <- clean_colnames(airqual)
+airqual[, "Day.Hour" := as.factor(paste0(Day, Hour))]
+meltdf <- melt(airqual, measure.vars = "O3.Value"  ,id = "Day.Hour")
+airqual <- airqual[, "average_O3" := mean(O3.Value, na.rm = T), by = .(Station, Day)]
+airqual <- airqual[, "average_NO2" := mean(NO2.Value, na.rm = T), by = .(Station, Day)]
+
+airqual <- airqual[, "O3_per_Hour" := mean(O3.Value, na.rm = T), by = .(Station, Hour)]
+airqual <- airqual[, "NO2_per_Hour" := mean(NO2.Value, na.rm = T), by = .(Station, Hour)]
+
+airqual <- airqual[, "average_Hour_NO2" := mean(NO2.Value, na.rm = T), by = .(Station,Day.Hour)]
+airqual <- airqual[, "average_Hour_O3" := mean(O3.Value, na.rm = T), by = .(Station,Day.Hour)]
+
+
+
+# average per Station per Day O3
+w <- ggplot(airqual, aes(x=fct_inorder(Day), y=average_O3)) + 
+       geom_point() + 
+       geom_smooth(method="lm", fullrange=T) + 
+       facet_wrap(~Station)
+
+ggsave(filename="O3_per_day.png", plot=w)
+# average per Station per Day O3       
+
+w <- ggplot(airqual, aes(x=fct_inorder(Day), y=average_NO2)) + 
+  geom_point() + 
+  geom_smooth(method="lm", fullrange=T) + 
+  facet_wrap(~Station)
+ggsave(filename="NO2_per_day.png", plot=w)
+
+
+# average per Station per Day O3
+w <- ggplot(airqual, aes(x=fct_inorder(Hour), y=O3_per_Hour)) + 
+       geom_point() + 
+       geom_smooth(method="lm", fullrange=T) + 
+       facet_wrap(~Station)
+
+ggsave(filename="O3_per_hour.png", plot=w)
+
+       
+# average per Station per Day O3       
+w <- ggplot(airqual, aes(x=fct_inorder(Hour), y=NO2_per_Hour)) + 
+  geom_point() + 
+  geom_smooth(method="lm", fullrange=T) + 
+  facet_wrap(~Station)
+
+ggsave(filename="NO2_per_hour.png", plot=w)
+
+
+
+
+
+
+ggplot(airqual, aes(x=Day.Hour, y=average_Hour_NO2)) + 
+       geom_point() + 
+       geom_smooth(method="lm", fullrange=T) + 
+       facet_wrap(~Station)
+
+       
+ggplot(airqual, aes(x=Day.Hour, y=average_Hour_O3)) + 
+       geom_point() + 
+       geom_smooth(method="lm", fullrange=T) + 
+       facet_wrap(~Station)
+
+corr <- cor.test(airqual[,O3.Value], airqual[,NO2.Value], method = "pearson", na.action = "na.omit")
+
+ggplot(airqual, aes(x=O3.Value, y=NO2.Value)) + 
+geom_point() + 
+geom_smooth(method="lm", fullrange=T) + 
+facet_wrap(~fct_inorder(Day))
+
+ggplot(airqual, aes(x=O3.Value, y=NO2.Value)) + 
+geom_point() + 
+geom_smooth(method="lm", fullrange=T) + 
+facet_wrap(~fct_inorder(Hour))
+
+ggplot(airqual, aes(x=average_Hour_O3, y=average_Hour_NO2)) + 
+geom_point() + 
+geom_smooth(method="lm", fullrange=F) + 
+facet_wrap(~fct_inorder(Day))
+
+
+ggplot(airqual, aes(x=average_Hour_O3, y=average_Hour_NO2)) + 
+geom_point() + 
+geom_smooth(method="lm", fullrange=F) + 
+facet_wrap(~fct_inorder(Hour))
+
+       
+```
+
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
